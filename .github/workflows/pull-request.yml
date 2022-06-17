@@ -1,0 +1,62 @@
+name: Pull Request Build
+
+# Controls when the action will run (on pull request)
+on: [pull_request]
+
+# locks out post-version-increment
+concurrency:
+    group: develop-lock
+
+jobs:
+
+  # build our project
+  build:
+    # The type of runner that the job will run on, also (TODO: test picidae)
+    runs-on: ubuntu-latest
+    #strategy:
+    #  matrix:
+    #    python-version: ['3.5', '3.6', '3.7', '3.8', '3.9', '3.10']
+
+    name: Run with ${{ matrix.python-version }}
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+
+      # HACK ALERT: required to be able to switch between branches
+      - name: fetch branches
+        run: |
+            git fetch --no-tags --depth=1 origin develop
+            git checkout -b develop
+            git fetch --no-tags origin ${{ github.event.pull_request.head.sha }}
+            git checkout ${{ github.event.pull_request.head.sha }}
+
+      # TODO: test picidae
+      #- uses: actions/setup-python@v2
+      #  with:
+      #    python-version: ${{ matrix.python-version }}
+
+      - name: verify branch name
+        # if branch name is not of the form <change type>-<version increment type>-<project>-<ticket number> or master or develop, we fail the build
+        # sorry don't know multi-line conditionals
+        run: "! $( [[ $(git branch --show-current) =~ ^(bugfix|task|hotfix)-(major|minor|patch)-PIC-[1-9][0-9]*$ ]] || [[ $(git branch --show-current) == develop ]] || [[ $(git branch --show-current) == master ]] )"
+
+      # if branch version is not the same as develop, branch needs to be updated (rebased back onto develop)
+      - name: check version
+        run: |
+          git checkout develop
+          develop_version=$(cat ./version.txt)
+          git checkout ${{ github.event.pull_request.head.sha }}
+          python ./build_scripts/check_version.py ${develop_version}
+
+      # TODO: test picidae
+      #- name: install
+      #  run: |
+      #    pip install --upgrade pip
+      #    pip install --upgrade setuptools
+      #    pip install -r requirements.txt
+      #    pip install pytest hypothesis
+
+      #- name: run pytest
+      #  run: pytest picidae/tests
+      
+
